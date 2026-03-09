@@ -5,3 +5,4 @@ pydantic
 python-dotenv
 huggingface_hub
 plotly
+streamlit-mic-recorder

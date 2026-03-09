@@ -5,6 +5,8 @@ import pandas as pd
 import plotly.express as px
 from core.nlu_engine import NLUEngine
 from evaluation.evaluator import NLUEvaluator
+from core.llm_client import transcribe_audio
+from streamlit_mic_recorder import mic_recorder
 
 # Set page config for a wider layout
 st.set_page_config(page_title="BotTrainer NLU", layout="wide")
@@ -70,8 +72,33 @@ if page == "💬 Interactive Chat":
                     st.caption("Extracted Entities:")
                     st.json(res.get("entities", {}))
 
-    # React to user input
-    if prompt := st.chat_input("E.g. Book a flight to Delhi tomorrow"):
+    # Input Area: Typing and Voice
+    st.write("")
+    col_mic, col_chat = st.columns([1, 10])
+    
+    with col_mic:
+        st.write("") # Padding
+        audio = mic_recorder(
+            start_prompt="🎙️", 
+            stop_prompt="🛑", 
+            just_once=True,
+            use_container_width=True,
+            key='mic'
+        )
+        
+    prompt = st.chat_input("E.g. Book a flight to Delhi tomorrow")
+    
+    # Process Audio Input
+    if audio and "bytes" in audio:
+        with st.spinner("Transcribing audio..."):
+            transcribed_text = transcribe_audio(audio["bytes"])
+            if not transcribed_text.startswith("Error"):
+                prompt = transcribed_text
+            else:
+                st.error(transcribed_text)
+
+    # React to user input (from either text or voice target)
+    if prompt:
         # Show user message
         with st.chat_message("user"):
             st.markdown(prompt)

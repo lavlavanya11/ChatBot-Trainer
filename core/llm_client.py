@@ -55,3 +55,34 @@ def fetch_llm_response(prompt: str, model_name: str = "meta-llama/Meta-Llama-3-8
             return {"error": "Hugging Face Permission Error: Please ensure your token has 'Inference' permissions enabled on the HF website."}
         print(f"Error during LLM inference: {e}")
         return {"error": error_msg}
+
+def transcribe_audio(audio_bytes: bytes, model_name: str = "openai/whisper-large-v3-turbo") -> str:
+    """
+    Sends raw audio bytes to Hugging Face's Whisper model to return transcribed text.
+    """
+    client = get_client()
+    if not client:
+        return "Error: HF_TOKEN is missing or invalid."
+        
+    import tempfile
+    # Save bytes to a temporary wav file so the HF API can infer the Content-Type
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        tmp.write(audio_bytes)
+        tmp_path = tmp.name
+        
+    try:
+        # The InferenceClient's automatic_speech_recognition method handles audio to text
+        text = client.automatic_speech_recognition(
+            audio=tmp_path,
+            model=model_name
+        )
+        # It typically returns a dict with a 'text' key or just a string
+        if isinstance(text, dict):
+            return text.get("text", "").strip()
+        return str(text).strip()
+    except Exception as e:
+        print(f"Audio transcription error: {e}")
+        return f"Error transcribing audio: {e}"
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
