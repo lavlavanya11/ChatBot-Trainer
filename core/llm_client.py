@@ -65,24 +65,35 @@ def transcribe_audio(audio_bytes: bytes, model_name: str = "openai/whisper-large
         return "Error: HF_TOKEN is missing or invalid."
         
     import tempfile
-    # Save bytes to a temporary wav file so the HF API can infer the Content-Type
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-        tmp.write(audio_bytes)
-        tmp_path = tmp.name
+    import requests
+    
+    # Retrieve the raw API key to construct our own request
+    core_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(core_dir)
+    env_path = os.path.join(project_root, ".env")
+    load_dotenv(dotenv_path=env_path, override=True)
+    api_key = os.getenv("HF_TOKEN")
+    
+    api_url = f"https://api-inference.huggingface.co/models/{model_name}"
+    headers = {
+        "Authorization": f"Bearer {api_key.strip()}",
+        "Content-Type": "audio/wav"
+    }
         
     try:
-        # The InferenceClient's automatic_speech_recognition method handles audio to text
-        text = client.automatic_speech_recognition(
-            audio=tmp_path,
-            model=model_name
-        )
-        # It typically returns a dict with a 'text' key or just a string
-        if isinstance(text, dict):
-            return text.get("text", "").strip()
-        return str(text).strip()
-    except Exception as e:
-        print(f"Audio transcription error: {e}")
-        return f"Error transcribing audio: {e}"
-    finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
+        # Send raw bytes directly with the forced 'audio/wav' header 
+        # to bypass strict/incorrect local MIME type inference
+        response = requests.post(api_url, headers=headers, data=audio_bytes)
+        response.raise_for_status()
+        
+        output = response.json()
+        if isinstance(output, dict):
+            return output.get("text", "").strip()
+        elif isinstance(output, list) and len(output) > 0:
+            return output[0].get("text", "").strip()
+            
+        return str(output).strip()
+    except requests.exceptions.RequestException as e:
+        error_details = response.text if 'response' in locals() else str(e)
+        print(f"Audio transcription error: {error_details}")
+        return f"Error transcribing audio: {error_details}"
